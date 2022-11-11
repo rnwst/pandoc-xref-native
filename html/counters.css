@@ -1,0 +1,105 @@
+/* CSS to number sections, figures, and tables using CSS counters (note that
+ * equations are numbered using MathJax). */
+
+/* Numbering sections ======================================================= */
+
+/* Configure counters ------------------------------------------------------- */
+
+body h1.title { counter-reset: h1; }
+
+h1 {
+  counter-reset: h2;
+  counter-increment: h1;
+}
+
+h2 {
+  counter-reset: h3;
+  counter-increment: h2;
+}
+
+h3 {
+  counter-reset: h4;
+  counter-increment: h3;
+}
+
+h4 {
+  counter-reset: h5;
+  counter-increment: h4;
+}
+
+h5 {
+  counter-reset: h6;
+  counter-increment: h5;
+}
+
+h6 { counter-increment: h6; }
+
+/* Prepend counters to header content --------------------------------------- */
+
+h1:not(h1.title)::before {
+  content: counter(h1) "  ";
+}
+
+h2::before {
+  content: counter(h1) "." counter(h2) "  ";
+}
+
+h3::before {
+  content: counter(h1) "." counter(h2) "." counter(h3) "  ";
+}
+
+h4::before {
+  content: counter(h1) "." counter(h2) "." counter(h3) "." counter(h4) "  ";
+}
+
+h5::before {
+  content:
+    counter(h1) "." counter(h2) "." counter(h3) "." counter(h4) "." counter(h5)
+    "  ";
+}
+
+h6::before {
+  content:
+    counter(h1) "." counter(h2) "." counter(h3) "." counter(h4) "." counter(h5)
+    "." counter(h6) "  ";
+}
+
+/* Numbering figures and subfigures ========================================= */
+
+/* Configure counters ------------------------------------------------------- */
+
+/* Figures */
+body { counter-reset: fig; } /* stylelint-disable-line no-duplicate-selectors */
+figure:not(div.subfigs figure) { counter-increment: fig; }
+
+/* Subfigures */
+div.subfigs { counter-reset: subfig; }
+figure > div.subfigs > figure { counter-increment: subfig; }
+
+/* Prepend prefixes and counters to figure captions ------------------------- */
+
+figure:not(div.subfigs figure) > figcaption::before {
+  content: "Figure " counter(fig) ": ";
+}
+
+figure > div.subfigs > figure > figcaption::before {
+  content: "(" counter(subfig, lower-alpha) "): ";
+}
+
+/* Numbering tables ========================================================= */
+
+/* Configure counters ------------------------------------------------------- */
+
+body { counter-reset: tab; } /* stylelint-disable-line no-duplicate-selectors */
+table { counter-increment: tab; }
+
+/* Prepend prefixes and counters to figure captions ------------------------- */
+
+table > caption::before {
+  content: "Table " counter(tab) ": ";
+}
+
+/* What if JavaScript is disabled? ========================================== */
+
+/* Cross-references are displayed as '??' if JavaScript is disabled */
+a.cross-ref:not(.cross-ref-success)::after { content: "??"; }

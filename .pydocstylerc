@@ -1,0 +1,4 @@
+[pep257]
+convention=pep257
+# pylint already complains when docstrings are missing.
+add-ignore=D102

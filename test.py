@@ -197,11 +197,11 @@ class TestPandocXrefNative(unittest.TestCase):
                  ('@#unknown_id', False)]
         for cross_ref_str, valid in tests:
             cross_ref = CrossRef.match(cross_ref_str)
-            validity = { True: 'valid', False: 'invalid' }
+            msg_dict = { True: 'valid', False: 'invalid' }
             self.assertEqual(cross_ref.valid, valid,
                 msg=(f'Expected cross-reference "{cross_ref_str}" to be '
-                     f'{validity[valid]}, but it turned out to be '
-                     f'{validity[cross_ref.valid]}! '
+                     f'{msg_dict[valid]}, but it turned out to be '
+                     f'{msg_dict[cross_ref.valid]}! '
                      f'`CrossRef.inside_brackets` is '
                      f'{str(CrossRef.inside_brackets)}.') )
 
@@ -215,11 +215,11 @@ class TestPandocXrefNative(unittest.TestCase):
         for string, expected_result in tests:
             elts = pandoc(string)
             result = new_sentence(elts[:-1])
-            sentences = { True: 'a new sentence', False: 'no new sentence' }
+            msg_dict = { True: 'a new sentence', False: 'no new sentence' }
             self.assertEqual(bool(result), expected_result,
                 msg=(f'Cross-reference in `{string}` starts '
-                     f'{sentences[expected_result]}, but function '
-                      '"new_sentence" says otherwise!') )
+                     f'{msg_dict[expected_result]}, but function '
+                      '`new_sentence` says otherwise!') )
 
 
     def test_resolve_crossrefs(self):

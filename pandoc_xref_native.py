@@ -16,7 +16,7 @@ Cross-referencing syntax::
 Todo:
 ----
 - improve sentence-end detection
-- parse metadata for prefixes
+- parse metadata for types
 - add support for other output formats
 - add support for other languages (pluralize)
 """
@@ -26,18 +26,14 @@ import io
 import re
 import subprocess
 import json
-import inflect
 
+import inflect
+from bs4 import BeautifulSoup
 from pandocfilters import walk, RawInline, Str
 
 #------------------------------------------------------------------------------
 # Common utility items --------------------------------------------------------
 #------------------------------------------------------------------------------
-
-prefixes = {'section': 'section',
-            'equation': 'equation',
-            'figure': 'figure',
-            'table': 'table'}
 
 section_ids = []
 equation_ids = []
@@ -84,31 +80,27 @@ def sec_id(sec):
     return sec[1][0]
 
 
-def eq_id(math):
-    r"""If display equation contains `\label{id}`, return id, else None."""
-    math_type = math[0]
-    if math_type['t'] == 'DisplayMath':
-        eq_str = math[1]
-        # Labels will be converted to ids in HTML and must therefore conform
-        # with HTML id naming rules are a subset of LaTeX \label{} naming
-        # rules.
-        result = re.search(rf'\\label\{{{ ID_RE }\}}', eq_str)
-        return result.group('id') if result else None
+def eq_id(raw_inline):
+    """Return equation id."""
+    if raw_inline[0] == 'html':
+        soup = BeautifulSoup(raw_inline[1], 'html.parser')
+        span = soup.find('span')
+        if span:
+            classes = span.get('class', [])
+            if 'math' in classes and 'display' in classes:
+                return span.get('id')
     return None
 
 
-def fig_id(image):
-    """If image is figure and has id, return id, else return None."""
-    _id = image[0][0]
-    url, title = target = image[2] # pylint: disable=unused-variable
-    # Pandoc considers an image whose title attribute starts with 'fig:'
-    # a figure. See https://github.com/jgm/pandoc/issues/3177.
-    return _id if _id and title.startswith('fig:') else None
+def fig_id(figure):
+    """If figure has id, return id, else return None."""
+    _id = figure[0][0]
+    return _id if _id else None
 
 
-def tab_id(tab):
+def tab_id(table):
     """If table has ID, return ID, else return None."""
-    _id = tab[0][0]
+    _id = table[0][0]
     return _id if _id else None
 
 
@@ -126,11 +118,11 @@ def collect_ids(key, value, _format, meta):
         # supplied explicitly.
         section_ids.append(sec_id(value))
 
-    if key == 'Math':
+    if key == 'RawInline':
         if eq_id(value) is not None:
             equation_ids.append(eq_id(value))
 
-    if key == 'Image':
+    if key == 'Figure':
         if fig_id(value) is not None:
             figure_ids.append(fig_id(value))
 
@@ -157,14 +149,14 @@ def check_id_uniqueness():
 
 inflect_engine = inflect.engine()
 
-def pluralize(prefix):
-    """Return plural form of prefix.
+def pluralize(_type):
+    """Return plural form of type.
 
-    Used by `cross_ref.__calc_prefix()`.
+    Used by `cross_ref.__calc_type()`.
     """
-    if prefix[-1] == '.':
-        return inflect_engine.plural(prefix[:-1]) + '.'
-    return inflect_engine.plural(prefix)
+    if _type[-1] == '.':
+        return inflect_engine.plural(_type[:-1]) + '.'
+    return inflect_engine.plural(_type)
 
 
 class CrossRef:
@@ -181,7 +173,7 @@ class CrossRef:
     # abbreviation as well as the cross-reference, separated by a non-breaking
     # space.
     re = ( r'^(?P<known_abbreviation>\S*\xa0)??'
-           r'(?P<prefix_suppressor>-)??'
+           r'(?P<type_suppressor>-)??'
            r'(?P<opening_bracket>\[)??'
           rf'@#{ ID_RE }'
            r'(?P<closing_bracket>\])??'
@@ -208,7 +200,7 @@ class CrossRef:
         """Initialize CrossRef instance."""
         self.match_object = match_object
         self.known_abbreviation = match_object.group('known_abbreviation')
-        self.prefix_suppressor = match_object.group('prefix_suppressor')
+        self.type_suppressor = match_object.group('type_suppressor')
         # pylint thinks 'id' is too short for a name.
         self.id = match_object.group('id') # pylint: disable=invalid-name
         self.opening_bracket = match_object.group('opening_bracket')
@@ -218,11 +210,10 @@ class CrossRef:
         # The following attributes are preliminarily set to None.
         self.valid = None
         self.type = None
-        self.prefix = None
+        self.type = None
         self.starts_sentence = None
 
         self.__check()
-        self.__calc_prefix()
         self.__set_bracket_states()
 
 
@@ -243,10 +234,10 @@ class CrossRef:
     def __check(self):
         """Check if cross-reference is valid."""
         # Prefix suppressor and opening bracket may not both be present.
-        if ( self.prefix_suppressor and
+        if ( self.type_suppressor and
                           (self.opening_bracket or self.closing_bracket
                                                 or CrossRef.inside_brackets) ):
-            eprint( 'pandoc-xref-native: A prefix suppressor (-) cannot be '
+            eprint( 'pandoc-xref-native: A type suppressor (-) cannot be '
                     'used in combination with brackets: '
                    f'{ self.match_object.group() }')
             self.valid = False
@@ -271,10 +262,11 @@ class CrossRef:
 
         self.__find_type()
         if self.type is None:
-            eprint(f"pandoc-xref-native: Id { self.id } was either not found "
-                    "in document or defined more than once!")
-            self.valid = False
-            return
+            eprint(f"pandoc-xref-native: Warning: Id { self.id } was either "
+                    "not found in the document or defined more than once!")
+            # Depending on the output format, this doesn't necessarily imply
+            # that the cross-reference is invalid, as the corresponding Id
+            # might be inserted as a raw element by another filter.
 
         # Check if crossrefs in brackets are all of the same type.
         if (not CrossRef.__bracketed_type is self.type
@@ -303,41 +295,24 @@ class CrossRef:
             CrossRef.__bracketed_type = self.type
 
 
-    def __calc_prefix(self):
-        """Determine prefix of crossref."""
-        if self.type is None:
-            return
-
-        if self.prefix_suppressor or CrossRef.inside_brackets:
-            self.prefix = ''
-        else:
-            self.prefix = prefixes[self.type]
-            if self.opening_bracket:
-                self.prefix = pluralize(self.prefix)
-            self.prefix += " "
-
-
-    def __maybe_capitalize_prefix(self):
-        """Capitalize crossref prefix if crossref starts sentence."""
-        if self.starts_sentence and not self.known_abbreviation:
-            self.prefix = self.prefix.capitalize()
-
-
     def html(self):
-        """Return HTML of resolved cross-reference."""
-        self.__maybe_capitalize_prefix()
+        """Return HTML."""
+        include_type = self.opening_bracket or (not self.type_suppressor
+                                             and not (CrossRef.inside_brackets
+                                                      # self.closing_bracket
+                                                      # has already been set to
+                                                      # False for last item in
+                                                      # brackets.
+                                                      or self.closing_bracket))
+        _pluralize = self.opening_bracket
+        html = (
+            f'<a href=#{ self.id } class="cross-ref'
+            f'{ " include-type" if include_type else "" }'
+            f'{ " pluralize" if _pluralize else "" }">'
+             '??'
+             '</a>')
 
-        if self.type is None:
-            return pandoc('**unable to resolve cross-reference!**')[0]
-
-        opening_tag = fr'<a href=#{ self.id } class="cross-ref">'
-        closing_tag = r'</a>'
-        if self.opening_bracket:
-            html_elt = self.prefix + opening_tag + closing_tag
-        else:
-            html_elt = opening_tag + self.prefix + closing_tag
-
-        elts = [ RawInline("html", html_elt) ]
+        elts = [ RawInline("html", html) ]
         if self.known_abbreviation:
             elts.insert(0, Str(self.known_abbreviation))
         if self.punctuation:

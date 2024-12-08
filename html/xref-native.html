@@ -27,39 +27,9 @@ $endfor$
 $for(header-includes)$
   $header-includes$
 $endfor$
-
-  <script>
-    /* Configure MathJax, in particular number cross-references after page has
-     * loaded, but before MathJax does any typesetting! This is because
-     * number_crossrefs.js needs to read the equation labels.
-     * =========================================================================
-     */
-
-    function number_crossrefs() {
-      // Can't use JavaScript string literals in the script as they conflict
-      // with pandoc's template syntax!
-      $number_crossrefs.js()$
-    }
-
-    window.MathJax = {
-      tex: {
-        tags: 'all'
-      },
-      svg: {
-        fontCache: 'global'
-      },
-      startup: {
-        ready: () => {
-          MathJax.startup.defaultReady();
-          number_crossrefs();
-        }
-      }
-    };
-  </script>
   <script type="text/javascript" id="MathJax-script" async
     src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
   </script>
-
   <!--[if lt IE 9]>
     <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
   <![endif]-->

@@ -7,7 +7,7 @@ import json
 import subprocess
 import re
 
-from pandocfilters import Header, Math, Image, walk
+from pandocfilters import Header, RawInline, Image, walk
 
 from pandoc_xref_native import section_ids, equation_ids, figure_ids, \
                                table_ids, pandoc, sec_id, eq_id, fig_id, \
@@ -82,22 +82,17 @@ class TestPandocXrefNative(unittest.TestCase):
 
     def test_eq_id(self):
         _id = 'eq:einstein'
-        equation = f'\nE=mc^2\n\\label{{{ _id }}}\n'
-        returned_id = eq_id(Math({'t': 'DisplayMath'}, equation)['c'])
+        html = f'<span id="{ _id }", class="math display">E=mc^2</span>'
+        returned_id = eq_id(RawInline('html', html)['c'])
         self.assertEqual(_id, returned_id)
-
-        self.assertEqual(None, eq_id(Math({'t': 'InlineMath'}, equation)['c']))
 
 
     def test_fig_id(self):
         _id = 'fig:fig1'
-
-        returned_id = fig_id(Image(mock_attr(_id), None, [None, 'fig:title'])
-                                                                         ['c'])
+        # A 'Figure' constructor is not yet available from the pandocfilters
+        # module.
+        returned_id = fig_id([["fig:fig1",[],[]], ])
         self.assertEqual(_id, returned_id)
-
-        returned_id = fig_id(Image(mock_attr(_id), None, [None, 'title'])['c'])
-        self.assertIsNone(returned_id)
 
 
     def test_tab_id(self):
@@ -108,19 +103,11 @@ class TestPandocXrefNative(unittest.TestCase):
 
     def test_collect_ids(self):
         reset_idlists()
-        pdc = ("# Header {#sec1}\n"
-               "\n"
-               "A display equation:\n"
-               "$$\n"
-               "E=mc^2\n"
-               "\\label{eq:einstein}\n"
-               "$$\n"
-               "\n"
-               "![Figure caption](einstein.jpg){#fig1}")
-        doc = pandoc(pdc, para=False)
+        doc = pandoc(("# Header {#sec1}\n\n"
+                      "![Figure caption](einstein.jpg){#fig1}"), para=False)
         walk(doc, collect_ids, None, None)
         self.assertEqual(section_ids, ['sec1'])
-        self.assertEqual(equation_ids, ['eq:einstein'])
+        self.assertEqual(equation_ids, [])
         self.assertEqual(figure_ids, ['fig1'])
 
 
@@ -151,7 +138,7 @@ class TestPandocXrefNative(unittest.TestCase):
         self.assertEqual(match.group('id'), 'id')
 
         match = re.match(regex, '-@#id')
-        self.assertEqual(match.group('prefix_suppressor'), '-')
+        self.assertEqual(match.group('type_suppressor'), '-')
 
         match = re.match(regex, '[@#id')
         self.assertEqual(match.group('opening_bracket'), '[')
@@ -193,8 +180,7 @@ class TestPandocXrefNative(unittest.TestCase):
                  ('[@#id', False),
                  ('@#id].', True),
                  ('[@#id', True),
-                 ('@#tab:id]', False), # bracketed ids must be of same type
-                 ('@#unknown_id', False)]
+                 ('@#tab:id]', False)] # bracketed ids must be of same type
         for cross_ref_str, valid in tests:
             cross_ref = CrossRef.match(cross_ref_str)
             msg_dict = { True: 'valid', False: 'invalid' }
@@ -229,30 +215,33 @@ class TestPandocXrefNative(unittest.TestCase):
         figure_ids[:] = ['fig1', 'fig2']
         tests = [
          ['See @#fig1.',
-          'See `<a href=#fig1 class="cross-ref">figure </a>`{=html}.'],
+          'See `<a href=#fig1 class="cross-ref include-type">??</a>`{=html}.'],
 
          ['See [@#fig1 and @#fig2].',
-          ('See `figures <a href=#fig1 class="cross-ref"></a>`{=html} and '
-           '`<a href=#fig2 class="cross-ref"></a>`{=html}.')],
+          ('See `<a href=#fig1 class="cross-ref include-type pluralize">??'
+           '</a>`{=html} and `<a href=#fig2 class="cross-ref">??'
+           '</a>`{=html}.')],
 
          # Known abbreviation preceding cross-reference.
          ['See e.g. @#fig1.',
-          'See e.g. `<a href=#fig1 class="cross-ref">figure </a>`{=html}.'],
+          ('See e.g. `<a href=#fig1 class="cross-ref include-type">??</a>`'
+           '{=html}.')],
 
          # Known abbreviation preceding cross-reference at the start of a
          # sentence.
          ['Fig. -@#fig1.',
-          'Fig. `<a href=#fig1 class="cross-ref"></a>`{=html}.'],
+          'Fig. `<a href=#fig1 class="cross-ref">??</a>`{=html}.'],
 
          # Cross-references in brackets not of the same type!
          ['See [@#fig1 and @#eq1].',
-          ('See `figures <a href=#fig1 class="cross-ref"></a>`{=html} '
-           'and @#eq1].')],
+          ('See `<a href=#fig1 class="cross-ref include-type pluralize">'
+           '??</a>`{=html} and @#eq1].')],
 
          ['@#fig1 shows...',
-          '`<a href=#fig1 class="cross-ref">Figure </a>`{=html} shows...'],
+          ('`<a href=#fig1 class="cross-ref include-type">??</a>`{=html}'
+           ' shows...')],
         ]
-        for pdc, exp_pdc in tests:
+        for pdc, exp_pdc in [*tests]:
             doc = pandoc(pdc, para=False)
             new_doc = walk(doc, resolve_crossrefs, None, None)
             exp_doc = pandoc(exp_pdc, para=False)

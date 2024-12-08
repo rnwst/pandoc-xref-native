@@ -79,7 +79,7 @@ figure > div.subfigs > figure { counter-increment: subfig; }
 /* Prepend prefixes and counters to figure captions ------------------------- */
 
 figure:not(div.subfigs figure) > figcaption::before {
-  content: "Figure " counter(fig) ": ";
+  content: "Fig. " counter(fig) ": ";
 }
 
 figure > div.subfigs > figure > figcaption::before {
@@ -96,7 +96,7 @@ table { counter-increment: tab; }
 /* Prepend prefixes and counters to figure captions ------------------------- */
 
 table > caption::before {
-  content: "Table " counter(tab) ": ";
+  content: "Tab. " counter(tab) ": ";
 }
 
 /* What if JavaScript is disabled? ========================================== */
